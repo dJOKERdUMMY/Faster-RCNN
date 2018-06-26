@@ -21,8 +21,9 @@ CLASSES = ('__background__',
 
 #CLASSES = ('__background__','person','bike','motorbike','car','bus')
 
+
 def vis_detections(im, class_name, dets,ax, thresh=0.5):
-    """Draw detected bounding boxes."""
+    """This function draws all the detected bounding boxes."""
 
     #returns the index value at which dets > threshold value 
     #considers only the last column as it has values as [[x,y,h,w,thresh]]
@@ -32,6 +33,9 @@ def vis_detections(im, class_name, dets,ax, thresh=0.5):
     if len(inds) == 0:
         return
 
+    #this part of the code shows all bounding boxes for all locations where the value is above thresh
+    #the bounding box is made and the text is annotated along with the class scores
+    
     #traverse through the indexes in inds where dets >= thresh
     for i in inds:
         #traverse through all indexes in dets and use the first 4 values [x,y,h,w]
@@ -48,16 +52,21 @@ def vis_detections(im, class_name, dets,ax, thresh=0.5):
                           edgecolor='red', linewidth=3.5)
             )
 
-        
+
+        #text annotation code foraddding text to the picture to show class and its score
+        #blue bounding box is added here around the text
         ax.text(bbox[0], bbox[1] - 2,
                 '{:s} {:.3f}'.format(class_name, score),
                 bbox=dict(facecolor='blue', alpha=0.5),
                 fontsize=14, color='white')
 
+    #add a title to the axis , different from ax.suptitle which addes title to figure , not worth mentioning
     ax.set_title(('{} detections with '
                   'p({} | box) >= {:.1f}').format(class_name, class_name,
                                                   thresh),
                   fontsize=14)
+
+    #configure the pyplot for plotting the image
     plt.axis('off')
     plt.tight_layout()
     plt.draw()
@@ -74,30 +83,61 @@ def demo(sess, net, image_name):
     # Detect all object classes and regress object bounds
     timer = Timer()
     timer.tic()
+
+    #im_detect() function detects the  classe of an object in an image given object proposals.
+    """
+    the function im_detect() has the following definition:
+    Arguments:
+        net (caffe.Net): Fast R-CNN network to use
+        im (ndarray): color image to test (in BGR order)
+        boxes (ndarray): R x 4 array of object proposals
+    Returns:
+        scores (ndarray): R x K array of object class scores (K includes
+            background as object category 0)
+        boxes (ndarray): R x (4*K) array of predicted bounding boxes
+    """
     scores, boxes = im_detect(sess, net, im)
     timer.toc()
     print ('Detection took {:.3f}s for '
            '{:d} object proposals').format(timer.total_time, boxes.shape[0])
 
     # Visualize detections for each class
+    #the code below for image indexing is probably to change rbg to bgr or vice versa
     im = im[:, :, (2, 1, 0)]
     fig, ax = plt.subplots(figsize=(12, 12))
     ax.imshow(im, aspect='equal')
 
+    #setting confidence-threshold and non-maximum-supression threshold
     CONF_THRESH = 0.8
     NMS_THRESH = 0.3
+
+    #iterate over all classes and find the boxes and scores for each individual boxes
     for cls_ind, cls in enumerate(CLASSES[1:]):
         cls_ind += 1 # because we skipped background
+
+        #boxes (ndarray): R x (4*K) array of predicted bounding boxes
+        #use the boxes value for a specific class
         cls_boxes = boxes[:, 4*cls_ind:4*(cls_ind + 1)]
+        #use a specific score for a particular class
         cls_scores = scores[:, cls_ind]
+
+        #stacks arrays in sequence horizontally
         dets = np.hstack((cls_boxes,
                           cls_scores[:, np.newaxis])).astype(np.float32)
+        
+        #nms() function returns the indexes of those boxes that we should keep by considering the IOU values
         keep = nms(dets, NMS_THRESH)
+
+        #keep only the required boxes and their scores , others are discarded
         dets = dets[keep, :]
+
+        #send the final decided bounding boxes to the above defined vis_detections() function
         vis_detections(im, cls, dets, ax, thresh=CONF_THRESH)
 
 def parse_args():
-    """Parse input arguments."""
+    """
+    Parse input arguments. Helps with the command line argument input.
+    """
     parser = argparse.ArgumentParser(description='Faster R-CNN demo')
     parser.add_argument('--gpu', dest='gpu_id', help='GPU device id to use [0]',
                         default=0, type=int)
@@ -110,17 +150,20 @@ def parse_args():
                         default=' ')
 
     args = parser.parse_args()
-
     return args
+
+
 if __name__ == '__main__':
     cfg.TEST.HAS_RPN = True  # Use RPN for proposals
 
     args = parse_args()
 
+    #we need to mention the pretrained path else it will raise an error
     if args.model == ' ':
         raise IOError(('Error: Model not found.\n'))
-        
+
     # init session
+    #allow_soft_placement automatically chooses an existing and supported device to run the operations in case the specified one doesn't exist
     sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
     # load network
     net = get_network(args.demo_net)
@@ -146,5 +189,5 @@ if __name__ == '__main__':
         print 'Demo for data/demo/{}'.format(im_name)
         demo(sess, net, im_name)
 
+    #finally show all the bounding boxes and class scores along with the image
     plt.show()
-
